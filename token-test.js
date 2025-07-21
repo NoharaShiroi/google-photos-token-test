@@ -3,10 +3,13 @@ const REDIRECT_URI = "https://noharashiroi.github.io/google-photos-token-test/";
 const SCOPES = "https://www.googleapis.com/auth/photoslibrary.readonly";
 const WORKER_URL = "https://photoforipadmini.n16961801.workers.dev/";
 
+let codeClient = null;
+
 function log(msg) {
   const el = document.getElementById("output");
   el.textContent += `\n${msg}`;
 }
+
 async function maybeExchangeCode() {
   const url = new URL(window.location.href);
   const code = url.searchParams.get("code");
@@ -37,6 +40,7 @@ async function maybeExchangeCode() {
       log("✅ 成功取得 access_token");
       await checkTokenScope(data.access_token);
       await tryPhotosAPI(data.access_token);
+      // 移除 URL 中的 code
       window.history.replaceState({}, document.title, REDIRECT_URI);
     } else {
       log("❌ Worker 回傳內容中沒有 access_token，錯誤如下：");
@@ -55,17 +59,21 @@ async function checkTokenScope(token) {
 
 async function tryPhotosAPI(token) {
   log("\n🚀 嘗試呼叫 Google Photos API...");
-  const res = await fetch("https://photoslibrary.googleapis.com/v1/albums?pageSize=1", {
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
-  });
-  const text = await res.text();
-  log("\n📦 API 回應：\n" + text);
+  try {
+    const res = await fetch("https://photoslibrary.googleapis.com/v1/albums?pageSize=1", {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    const text = await res.text();
+    log("\n📦 API 回應：\n" + text);
+  } catch (e) {
+    log("❌ API 請求失敗：" + e.message);
+  }
 }
 
 function initCodeClient() {
-  const codeClient = google.accounts.oauth2.initCodeClient({
+  codeClient = google.accounts.oauth2.initCodeClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
     redirect_uri: REDIRECT_URI,
@@ -73,13 +81,19 @@ function initCodeClient() {
     state: "token-test"
   });
 
-  document.getElementById("authorize-btn").addEventListener("click", () => {
-    codeClient.requestCode();
-  });
+  const btn = document.getElementById("authorize-btn");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      codeClient.requestCode();
+    });
+  } else {
+    console.warn("⚠️ 找不到 #authorize-btn");
+  }
 }
 
 window.onload = () => {
   maybeExchangeCode();
+
   const wait = () => {
     if (window.google && google.accounts && google.accounts.oauth2) {
       initCodeClient();
