@@ -1,41 +1,55 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Google Photos Token Test</title>
+  <title>📷 Google Photos Token 測試</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body style="font-family: sans-serif; padding: 2rem;">
-  <h2>📷 Google Photos Token 測試頁</h2>
-  <button id="authorize-btn">🔐 登入 Google 並取得 Token</button>
+  <h2>🔐 Google Photos Redirect 登入測試</h2>
+  <button id="authorize-btn">登入並交換 token</button>
   <pre id="output" style="white-space: pre-wrap; background: #f4f4f4; padding: 1rem; margin-top: 1rem;"></pre>
 
   <script>
-    const CLIENT_ID = "1004388657829-e1ppkmbn2o3f1i18ea4r420tdio3m01l.apps.googleusercontent.com";
+    const CLIENT_ID = "1004388657829-mvpott95dsl5bapu40vi2n5li7i7t7d1.apps.googleusercontent.com";
+    const REDIRECT_URI = "https://noharashiroi.github.io/photo-frame/token-test.html"; // 或其他 callback 頁面
     const SCOPES = "https://www.googleapis.com/auth/photoslibrary.readonly";
-    let tokenClient = null;
+    const WORKER_URL = "https://photoforipadmini.n16961801.workers.dev/"; // ← 你的 Cloudflare Worker proxy
 
     function log(msg) {
       const el = document.getElementById("output");
       el.textContent += `\n${msg}`;
     }
 
-    function initTokenClient() {
-      tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        prompt: 'consent',
-        callback: async (response) => {
-          if (response.access_token) {
-            log("✅ 已取得 access_token：\n" + response.access_token);
-            await checkTokenScope(response.access_token);
-            await tryPhotosAPI(response.access_token);
-          } else {
-            log("❌ 沒有取得 access_token");
-          }
-        }
+    // 如果是從 Google 重導回來，有 ?code=
+    async function maybeExchangeCode() {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get("code");
+
+      if (!code) return;
+
+      log("🔁 偵測到 code，呼叫 Worker 交換 token...");
+
+      const res = await fetch(WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code,
+          redirect_uri: REDIRECT_URI
+        })
       });
+
+      const data = await res.json();
+      log("🎫 換得 Token 回應：\n" + JSON.stringify(data, null, 2));
+
+      if (data.access_token) {
+        await checkTokenScope(data.access_token);
+        await tryPhotosAPI(data.access_token);
+        window.history.replaceState({}, document.title, REDIRECT_URI); // 清除網址中的 ?code=
+      } else {
+        log("❌ 無法取得 access_token");
+      }
     }
 
     async function checkTokenScope(token) {
@@ -55,18 +69,25 @@
       log("\n📦 API 回應：\n" + text);
     }
 
-    document.getElementById("authorize-btn").addEventListener("click", () => {
-      if (!tokenClient) {
-        log("❗️ 尚未初始化 token client");
-      } else {
-        tokenClient.requestAccessToken();
-      }
-    });
+    function initCodeClient() {
+      const codeClient = google.accounts.oauth2.initCodeClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        redirect_uri: REDIRECT_URI,
+        ux_mode: "redirect",
+        state: "token-test"
+      });
+
+      document.getElementById("authorize-btn").addEventListener("click", () => {
+        codeClient.requestCode();
+      });
+    }
 
     window.onload = () => {
+      maybeExchangeCode(); // 如果網址有 code，先處理
       const wait = () => {
         if (window.google && google.accounts && google.accounts.oauth2) {
-          initTokenClient();
+          initCodeClient();
         } else {
           setTimeout(wait, 100);
         }
