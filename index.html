@@ -40,8 +40,25 @@
         })
       });
 
-      const data = await res.json();
-      log("🎫 換得 Token 回應：\n" + JSON.stringify(data, null, 2));
+      const text = await res.text();
+log("🔽 Worker 回應原始內容：\n" + text);
+
+let data = {};
+try {
+  data = JSON.parse(text);
+} catch (e) {
+  log("❌ JSON 解析錯誤：" + e.message);
+  return;
+}
+
+if (data.access_token) {
+  await checkTokenScope(data.access_token);
+  await tryPhotosAPI(data.access_token);
+  window.history.replaceState({}, document.title, REDIRECT_URI); // 清除網址中的 ?code=
+} else {
+  log("❌ Worker 回傳內容中沒有 access_token，可能錯誤如下：");
+  log(JSON.stringify(data, null, 2));
+}
 
       if (data.access_token) {
         await checkTokenScope(data.access_token);
