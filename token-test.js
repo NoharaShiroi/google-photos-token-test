@@ -7,7 +7,6 @@ function log(msg) {
   const el = document.getElementById("output");
   el.textContent += `\n${msg}`;
 }
-
 async function maybeExchangeCode() {
   const url = new URL(window.location.href);
   const code = url.searchParams.get("code");
