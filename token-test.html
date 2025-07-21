@@ -2,21 +2,89 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
+  <title>🔐 Google Photos Token 測試工具</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>📷 Google Photos Token 測試</title>
   <meta http-equiv="Content-Security-Policy"
     content="
       default-src 'self';
       script-src 'self' https://accounts.google.com https://apis.google.com;
-      connect-src 'self' https://photoforipadmini.n16961801.workers.dev https://www.googleapis.com;
+      connect-src *;
       style-src 'self' 'unsafe-inline';
     ">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="token-test.js" defer></script>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; background: #f9f9f9; }
+    button { padding: 10px 20px; font-size: 1rem; }
+    pre { background: #eee; padding: 1rem; white-space: pre-wrap; }
+  </style>
 </head>
-<body style="font-family: sans-serif; padding: 2rem;">
-  <h2>🔐 Google Photos Redirect 登入測試</h2>
-  <button id="authorize-btn">登入並交換 token</button>
-  <pre id="output" style="white-space: pre-wrap; background: #f4f4f4; padding: 1rem; margin-top: 1rem;"></pre>
+<body>
+  <h2>📷 Google Photos Redirect 測試</h2>
+  <button id="authorize-btn">登入 Google 並交換 token</button>
+  <pre id="output">📝 等待使用者操作...</pre>
+
+  <script>
+    const CLIENT_ID = "1004388657829-mvpott95dsl5bapu40vi2n5li7i7t7d1.apps.googleusercontent.com";
+    const REDIRECT_URI = window.location.origin + window.location.pathname; // 自動設成這頁網址
+    const WORKER_URL = "https://photoforipadmini.n16961801.workers.dev/";
+
+    let codeClient = null;
+    const output = document.getElementById("output");
+
+    function log(msg) {
+      output.textContent += `\n${msg}`;
+    }
+
+    async function maybeExchangeCode() {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get("code");
+      if (!code) return;
+
+      log("🔁 偵測到 code，送到 Worker 交換 token...");
+
+      try {
+        const res = await fetch(WORKER_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, redirect_uri: REDIRECT_URI })
+        });
+
+        const text = await res.text();
+        log("📦 Worker 回傳：\n" + text);
+
+        // 移除 URL 中的 code
+        window.history.replaceState({}, document.title, REDIRECT_URI);
+      } catch (err) {
+        log("❌ 發送請求時錯誤：" + err.message);
+      }
+    }
+
+    function initCodeClient() {
+      codeClient = google.accounts.oauth2.initCodeClient({
+        client_id: CLIENT_ID,
+        scope: "https://www.googleapis.com/auth/photoslibrary.readonly",
+        redirect_uri: REDIRECT_URI,
+        ux_mode: "redirect",
+        state: "token-test"
+      });
+
+      document.getElementById("authorize-btn").addEventListener("click", () => {
+        codeClient.requestCode();
+      });
+    }
+
+    window.onload = () => {
+      maybeExchangeCode();
+
+      const wait = () => {
+        if (window.google && google.accounts && google.accounts.oauth2) {
+          initCodeClient();
+        } else {
+          setTimeout(wait, 100);
+        }
+      };
+      wait();
+    };
+  </script>
 </body>
 </html>
