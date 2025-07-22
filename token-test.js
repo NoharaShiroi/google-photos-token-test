@@ -65,7 +65,9 @@ async function tryPhotosAPI(token) {
         Authorization: `Bearer ${token}`
       }
     });
+
     const text = await res.text();
+    log(`\n📦 API 狀態碼: ${res.status}`);
     log("\n📦 API 回應：\n" + text);
   } catch (e) {
     log("❌ API 請求失敗：" + e.message);
