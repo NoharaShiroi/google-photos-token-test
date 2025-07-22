@@ -5,12 +5,13 @@
   <title>🔐 Google Photos Token 測試工具</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy"
-    content="
-      default-src 'self';
-      script-src 'self' https://accounts.google.com https://apis.google.com;
-      connect-src *;
-      style-src 'self' 'unsafe-inline';
-    ">
+  content="
+    default-src 'self';
+    script-src 'self' https://accounts.google.com https://apis.google.com;
+    connect-src 'self' https://www.googleapis.com https://photoslibrary.googleapis.com https://oauth2.googleapis.com;
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data: https://*.googleusercontent.com https://content-photoslibrary.googleapis.com;
+  ">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     body { font-family: sans-serif; padding: 2rem; background: #f9f9f9; }
