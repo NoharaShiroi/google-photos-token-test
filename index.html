@@ -26,6 +26,7 @@
     const CLIENT_ID = "1004388657829-mvpott95dsl5bapu40vi2n5li7i7t7d1.apps.googleusercontent.com";
     const REDIRECT_URI = window.location.origin + window.location.pathname;
     const SCOPES = "https://www.googleapis.com/auth/photoslibrary.readonly https://www.googleapis.com/auth/userinfo.email";
+    const WORKER_URL = "https://photoforipadmini.n16961801.workers.dev/";
 
     function extractTokenAndTest() {
       const raw = document.getElementById("token-input").value.trim();
@@ -101,9 +102,28 @@
       const code = url.searchParams.get("code");
       if (!code) return;
 
-      document.getElementById("result").textContent = "🔁 偵測到 code，呼叫 token endpoint 測試用 Cloudflare Worker 或後端...（此處可擴充）";
+      const output = document.getElementById("result");
+      output.textContent = "🔁 偵測到 code，呼叫 Cloudflare Worker 交換 token...";
 
-      // 移除 code 參數（清除 URL）
+      try {
+        const res = await fetch(WORKER_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, redirect_uri: REDIRECT_URI })
+        });
+        const data = await res.json();
+
+        if (data.access_token) {
+          document.getElementById("token-input").value = data.access_token;
+          testToken(data.access_token);
+        } else {
+          output.textContent = "❌ Worker 回傳錯誤：" + JSON.stringify(data, null, 2);
+        }
+      } catch (err) {
+        output.textContent = "❌ Worker 請求失敗：" + err.message;
+      }
+
+      // 清除 URL 中的 code
       url.searchParams.delete("code");
       url.searchParams.delete("state");
       window.history.replaceState({}, document.title, url.toString());
