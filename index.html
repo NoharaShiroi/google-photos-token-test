@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>🔍 Google Token Debug 工具</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: sans-serif; background: #f8f8f8; padding: 2rem; }
+    input, button, textarea { padding: 10px; font-size: 1rem; margin: 5px 0; width: 100%; max-width: 600px; }
+    pre { background: #eee; padding: 1rem; white-space: pre-wrap; max-width: 100%; overflow-x: auto; }
+    h2 { color: #333; }
+    .success { color: green; font-weight: bold; }
+    .fail { color: red; font-weight: bold; }
+  </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <h2>🔐 Google OAuth Token 測試工具</h2>
+  <p>可貼上 token 或整段 JSON 結果：</p>
+  <textarea id="token-input" rows="4" placeholder="貼上 access_token 或含有 access_token 的 JSON..."></textarea>
+  <button onclick="extractTokenAndTest()">✅ 自動提取並測試</button>
+  <button onclick="startAuth()">🔄 重新登入並取得新 token</button>
+  <pre id="result">📝 等待輸入 token...</pre>
+
+  <script>
+    const CLIENT_ID = "1004388657829-mvpott95dsl5bapu40vi2n5li7i7t7d1.apps.googleusercontent.com";
+    const REDIRECT_URI = window.location.origin + window.location.pathname;
+    const SCOPES = "https://www.googleapis.com/auth/photoslibrary.readonly https://www.googleapis.com/auth/userinfo.email";
+
+    function extractTokenAndTest() {
+      const raw = document.getElementById("token-input").value.trim();
+      let token = raw;
+      try {
+        const json = JSON.parse(raw);
+        if (json.access_token) token = json.access_token;
+      } catch (e) {
+        // 不是 JSON，略過
+      }
+      testToken(token);
+    }
+
+    async function testToken(token) {
+      const output = document.getElementById("result");
+      if (!token) {
+        output.textContent = "❌ 請先輸入 token";
+        return;
+      }
+
+      output.textContent = "🔍 查詢 tokeninfo...";
+      try {
+        const tokenInfoRes = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${token}`);
+        const tokenInfo = await tokenInfoRes.json();
+        if (tokenInfo.error_description) {
+          output.textContent = `❌ Token 無效：${tokenInfo.error_description}`;
+          return;
+        }
+
+        output.innerHTML = "<span class='success'>✅ Token 有效</span>\n\n";
+        output.innerHTML += "📜 Token Info:\n" + JSON.stringify(tokenInfo, null, 2);
+
+        const exp = tokenInfo.exp ? new Date(parseInt(tokenInfo.exp) * 1000) : null;
+        if (exp) output.innerHTML += `\n⏳ 過期時間：${exp.toLocaleString()}`;
+
+        const hasPhotosScope = tokenInfo.scope?.includes("photoslibrary.readonly");
+        const hasEmailScope = tokenInfo.scope?.includes("userinfo.email");
+        output.innerHTML += `\n📸 Photos Scope: <span class='${hasPhotosScope ? "success" : "fail"}'>${hasPhotosScope ? "有授權" : "缺少"}</span>`;
+        output.innerHTML += `\n📧 Email Scope: <span class='${hasEmailScope ? "success" : "fail"}'>${hasEmailScope ? "有授權" : "缺少"}</span>`;
+
+        output.innerHTML += "\n\n📧 嘗試查詢使用者 email...";
+        const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const userInfo = await userInfoRes.json();
+        output.innerHTML += `\n👤 User Info:\n` + JSON.stringify(userInfo, null, 2);
+
+        output.innerHTML += "\n\n📸 嘗試呼叫 Google Photos API...";
+        const photoRes = await fetch("https://photoslibrary.googleapis.com/v1/albums?pageSize=1", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const photoText = await photoRes.text();
+        output.innerHTML += `\n📦 Photos API 狀態: ${photoRes.status}`;
+        output.innerHTML += `\n📦 Photos API 回應:\n${photoText}`;
+      } catch (err) {
+        output.innerHTML += "\n❌ 發生錯誤：" + err.message;
+      }
+    }
+
+    function startAuth() {
+      const codeClient = google.accounts.oauth2.initCodeClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        redirect_uri: REDIRECT_URI,
+        ux_mode: "redirect",
+        state: "debug-token"
+      });
+      codeClient.requestCode();
+    }
+
+    async function maybeExchangeCode() {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get("code");
+      if (!code) return;
+
+      document.getElementById("result").textContent = "🔁 偵測到 code，呼叫 token endpoint 測試用 Cloudflare Worker 或後端...（此處可擴充）";
+
+      // 移除 code 參數（清除 URL）
+      url.searchParams.delete("code");
+      url.searchParams.delete("state");
+      window.history.replaceState({}, document.title, url.toString());
+    }
+
+    window.onload = maybeExchangeCode;
+  </script>
+</body>
+</html>
